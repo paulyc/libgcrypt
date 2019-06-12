@@ -38,15 +38,6 @@
 
 .text
 
-#ifdef _WIN32
-#define GET_DATA_POINTER(reg, name) \
-	adrp    reg, name ; \
-	add     reg, reg, #:lo12:name ;
-#else
-#define GET_DATA_POINTER(reg, name) \
-	adrp    reg, :got:name ; \
-	ldr     reg, [reg, #:got_lo12:name] ;
-#endif
 
 /* register macros */
 #define INPUT     x0
@@ -163,6 +154,7 @@ _gcry_chacha20_aarch64_blocks4:
 	 *	x2: src
 	 *	x3: nblks (multiple of 4)
 	 */
+	CFI_STARTPROC()
 
 	GET_DATA_POINTER(CTR, .Linc_counter);
 	add INPUT_CTR, INPUT, #(12*4);
@@ -309,6 +301,7 @@ _gcry_chacha20_aarch64_blocks4:
 
 	eor x0, x0, x0
 	ret
+	CFI_ENDPROC()
 ELF(.size _gcry_chacha20_aarch64_blocks4, .-_gcry_chacha20_aarch64_blocks4;)
 
 #endif

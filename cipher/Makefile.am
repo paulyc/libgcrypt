@@ -48,7 +48,7 @@ libcipher_la_SOURCES = \
 	cipher-aeswrap.c \
 	cipher-ccm.c \
 	cipher-cmac.c \
-	cipher-gcm.c cipher-gcm-intel-pclmul.c \
+	cipher-gcm.c cipher-gcm-intel-pclmul.c cipher-gcm-armv7-neon.S \
 	cipher-gcm-armv8-aarch32-ce.S cipher-gcm-armv8-aarch64-ce.S \
 	cipher-poly1305.c \
 	cipher-ocb.c \
@@ -78,7 +78,8 @@ EXTRA_libcipher_la_SOURCES = \
 	cast5.c cast5-amd64.S cast5-arm.S \
 	chacha20.c chacha20-amd64-ssse3.S chacha20-amd64-avx2.S \
 	chacha20-armv7-neon.S chacha20-aarch64.S \
-	crc.c crc-intel-pclmul.c \
+	crc.c crc-intel-pclmul.c crc-armv8-ce.c \
+	crc-armv8-aarch64-ce.S \
 	des.c des-amd64.S \
 	dsa.c \
 	elgamal.c \
@@ -103,8 +104,8 @@ EXTRA_libcipher_la_SOURCES = \
 	serpent.c serpent-sse2-amd64.S \
 	serpent-avx2-amd64.S serpent-armv7-neon.S \
 	sha1.c sha1-ssse3-amd64.S sha1-avx-amd64.S sha1-avx-bmi2-amd64.S \
-	sha1-armv7-neon.S sha1-armv8-aarch32-ce.S sha1-armv8-aarch64-ce.S \
-	sha1-intel-shaext.c \
+	sha1-avx2-bmi2-amd64.S sha1-armv7-neon.S sha1-armv8-aarch32-ce.S \
+	sha1-armv8-aarch64-ce.S sha1-intel-shaext.c \
 	sha256.c sha256-ssse3-amd64.S sha256-avx-amd64.S \
 	sha256-avx2-bmi2-amd64.S \
 	sha256-armv8-aarch32-ce.S sha256-armv8-aarch64-ce.S \
@@ -141,8 +142,57 @@ endif
 
 
 # We need to lower the optimization for this module.
-tiger.o: $(srcdir)/tiger.c
-	`echo $(COMPILE) -c $(srcdir)/tiger.c | $(o_flag_munging) `
+tiger.o: $(srcdir)/tiger.c Makefile
+	`echo $(COMPILE) -c $< | $(o_flag_munging) `
 
-tiger.lo: $(srcdir)/tiger.c
-	`echo $(LTCOMPILE) -c $(srcdir)/tiger.c | $(o_flag_munging) `
+tiger.lo: $(srcdir)/tiger.c Makefile
+	`echo $(LTCOMPILE) -c $< | $(o_flag_munging) `
+
+
+# We need to disable instrumentation for these modules as they use cc as
+# thin assembly front-end and do not tolerate in-between function calls
+# inserted by compiler as those functions may clobber the XMM registers.
+if ENABLE_INSTRUMENTATION_MUNGING
+instrumentation_munging = sed \
+	-e 's/-fsanitize[=,\-][=,a-z,A-Z,0-9,\,,\-]*//g' \
+	-e 's/-fprofile[=,\-][=,a-z,A-Z,0-9,\,,\-]*//g' \
+	-e 's/-fcoverage[=,\-][=,a-z,A-Z,0-9,\,,\-]*//g'
+else
+instrumentation_munging = cat
+endif
+
+rijndael-aesni.o: $(srcdir)/rijndael-aesni.c Makefile
+	`echo $(COMPILE) -c $< | $(instrumentation_munging) `
+
+rijndael-aesni.lo: $(srcdir)/rijndael-aesni.c Makefile
+	`echo $(LTCOMPILE) -c $< | $(instrumentation_munging) `
+
+rijndael-ssse3-amd64.o: $(srcdir)/rijndael-ssse3-amd64.c Makefile
+	`echo $(COMPILE) -c $< | $(instrumentation_munging) `
+
+rijndael-ssse3-amd64.lo: $(srcdir)/rijndael-ssse3-amd64.c Makefile
+	`echo $(LTCOMPILE) -c $< | $(instrumentation_munging) `
+
+cipher-gcm-intel-pclmul.o: $(srcdir)/cipher-gcm-intel-pclmul.c Makefile
+	`echo $(COMPILE) -c $< | $(instrumentation_munging) `
+
+cipher-gcm-intel-pclmul.lo: $(srcdir)/cipher-gcm-intel-pclmul.c Makefile
+	`echo $(LTCOMPILE) -c $< | $(instrumentation_munging) `
+
+sha1-intel-shaext.o: $(srcdir)/sha1-intel-shaext.c Makefile
+	`echo $(COMPILE) -c $< | $(instrumentation_munging) `
+
+sha1-intel-shaext.lo: $(srcdir)/sha1-intel-shaext.c Makefile
+	`echo $(LTCOMPILE) -c $< | $(instrumentation_munging) `
+
+sha256-intel-shaext.o: $(srcdir)/sha256-intel-shaext.c Makefile
+	`echo $(COMPILE) -c $< | $(instrumentation_munging) `
+
+sha256-intel-shaext.lo: $(srcdir)/sha256-intel-shaext.c Makefile
+	`echo $(LTCOMPILE) -c $< | $(instrumentation_munging) `
+
+crc-intel-pclmul.o: $(srcdir)/crc-intel-pclmul.c Makefile
+	`echo $(COMPILE) -c $< | $(instrumentation_munging) `
+
+crc-intel-pclmul.lo: $(srcdir)/crc-intel-pclmul.c Makefile
+	`echo $(LTCOMPILE) -c $< | $(instrumentation_munging) `

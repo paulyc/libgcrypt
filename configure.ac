@@ -691,6 +691,17 @@ AC_ARG_ENABLE([O-flag-munging],
 AC_MSG_RESULT($enable_o_flag_munging)
 AM_CONDITIONAL(ENABLE_O_FLAG_MUNGING, test "$enable_o_flag_munging" = "yes")
 
+# Implementation of the --disable-instrumentation-munging switch.
+AC_MSG_CHECKING([whether a instrumentation (-fprofile, -fsanitize) munging is requested])
+AC_ARG_ENABLE([instrumentation-munging],
+              AC_HELP_STRING([--disable-instrumentation-munging],
+                 [Disable modification of the cc instrumentation options]),
+              [enable_instrumentation_munging=$enableval],
+              [enable_instrumentation_munging=yes])
+AC_MSG_RESULT($enable_instrumentation_munging)
+AM_CONDITIONAL(ENABLE_INSTRUMENTATION_MUNGING,
+	       test "$enable_instrumentation_munging" = "yes")
+
 # Implementation of the --disable-amd64-as-feature-detection switch.
 AC_MSG_CHECKING([whether to enable AMD64 as(1) feature detection])
 AC_ARG_ENABLE(amd64-as-feature-detection,
@@ -805,7 +816,7 @@ AC_SEARCH_LIBS(setsockopt, [nsl])
 ##################################
 
 AC_HEADER_STDC
-AC_CHECK_HEADERS(unistd.h sys/select.h sys/msg.h)
+AC_CHECK_HEADERS(unistd.h sys/select.h sys/msg.h sys/auxv.h)
 INSERT_SYS_SELECT_H=
 if test x"$ac_cv_header_sys_select_h" = xyes; then
   INSERT_SYS_SELECT_H=" include <sys/select.h>"
@@ -1168,6 +1179,34 @@ AC_CACHE_CHECK([whether GCC assembler is compatible for ARMv8/Aarch64 assembly i
 if test "$gcry_cv_gcc_aarch64_platform_as_ok" = "yes" ; then
    AC_DEFINE(HAVE_COMPATIBLE_GCC_AARCH64_PLATFORM_AS,1,
      [Defined if underlying assembler is compatible with ARMv8/Aarch64 assembly implementations])
+fi
+
+#
+# Check whether GCC assembler supports for CFI directives.
+#
+AC_CACHE_CHECK([whether GCC assembler supports for CFI directives],
+       [gcry_cv_gcc_asm_cfi_directives],
+       [gcry_cv_gcc_asm_cfi_directives=no
+        AC_LINK_IFELSE([AC_LANG_PROGRAM(
+          [[__asm__(
+                ".text\n\t"
+                "ac_test:\n\t"
+                ".cfi_startproc\n\t"
+                ".cfi_remember_state\n\t"
+                ".cfi_adjust_cfa_offset 8\n\t"
+                ".cfi_rel_offset 0, 8\n\t"
+                ".cfi_def_cfa_register 1\n\t"
+                ".cfi_register 2, 3\n\t"
+                ".cfi_restore 2\n\t"
+                ".cfi_escape 0x0f, 0x02, 0x11, 0x00\n\t"
+                ".cfi_restore_state\n\t"
+                ".long 0\n\t"
+                ".cfi_endproc\n\t"
+            );]])],
+          [gcry_cv_gcc_asm_cfi_directives=yes])])
+if test "$gcry_cv_gcc_asm_cfi_directives" = "yes" ; then
+   AC_DEFINE(HAVE_GCC_ASM_CFI_DIRECTIVES,1,
+             [Defined if underlying assembler supports for CFI directives])
 fi
 
 
@@ -1617,7 +1656,6 @@ if test "$gcry_cv_gcc_platform_as_ok_for_intel_syntax" = "yes" ; then
             [Defined if underlying assembler is compatible with Intel syntax assembly implementations])
 fi
 
-
 #
 # Check whether compiler is configured for ARMv6 or newer architecture
 #
@@ -1806,8 +1844,8 @@ AC_CHECK_FUNCS(strtoul memmove stricmp atexit raise)
 # Other checks
 AC_CHECK_FUNCS(strerror rand mmap getpagesize sysconf waitpid wait4)
 AC_CHECK_FUNCS(gettimeofday getrusage gethrtime clock_gettime syslog)
-AC_CHECK_FUNCS(syscall fcntl ftruncate flockfile)
-AC_CHECK_FUNCS(explicit_bzero getentropy)
+AC_CHECK_FUNCS(syscall fcntl ftruncate flockfile getauxval elf_aux_info)
+AC_CHECK_FUNCS(explicit_bzero explicit_memset getentropy)
 
 GNUPG_CHECK_MLOCK
 
@@ -2382,6 +2420,11 @@ if test "$found" = "1" ; then
          # Build with the assembly implementation
          GCRYPT_DIGESTS="$GCRYPT_DIGESTS crc-intel-pclmul.lo"
       ;;
+      aarch64-*-*)
+         # Build with the assembly implementation
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS crc-armv8-ce.lo"
+         GCRYPT_CIPHERS="$GCRYPT_CIPHERS crc-armv8-aarch64-ce.lo"
+      ;;
    esac
 fi
 
@@ -2541,6 +2584,7 @@ case "${host}" in
     GCRYPT_DIGESTS="$GCRYPT_DIGESTS sha1-ssse3-amd64.lo"
     GCRYPT_DIGESTS="$GCRYPT_DIGESTS sha1-avx-amd64.lo"
     GCRYPT_DIGESTS="$GCRYPT_DIGESTS sha1-avx-bmi2-amd64.lo"
+    GCRYPT_DIGESTS="$GCRYPT_DIGESTS sha1-avx2-bmi2-amd64.lo"
   ;;
   arm*-*-*)
     # Build with the assembly implementation

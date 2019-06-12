@@ -86,6 +86,15 @@
 # endif
 #endif /* GCM_USE_ARM_PMULL */
 
+/* GCM_USE_ARM_NEON indicates whether to compile GCM with ARMv7 NEON code. */
+#undef GCM_USE_ARM_NEON
+#if defined(GCM_USE_TABLES)
+#if defined(HAVE_ARM_ARCH_V6) && defined(__ARMEL__) && \
+    defined(HAVE_COMPATIBLE_GCC_ARM_PLATFORM_AS) && \
+    defined(HAVE_GCC_INLINE_ASM_NEON)
+#  define GCM_USE_ARM_NEON 1
+#endif
+#endif /* GCM_USE_ARM_NEON */
 
 typedef unsigned int (*ghash_fn_t) (gcry_cipher_hd_t c, byte *result,
                                     const byte *buf, size_t nblocks);
@@ -306,10 +315,10 @@ struct gcry_cipher_handle
 #ifdef GCM_USE_TABLES
  #if (SIZEOF_UNSIGNED_LONG == 8 || defined(__x86_64__))
       #define GCM_TABLES_USE_U64 1
-      u64 gcm_table[2 * 16];
+      u64 gcm_table[4 * 16];
  #else
       #undef GCM_TABLES_USE_U64
-      u32 gcm_table[4 * 16];
+      u32 gcm_table[8 * 16];
  #endif
 #endif
     } gcm;
@@ -616,6 +625,29 @@ static inline unsigned int _gcry_blocksize_shift(gcry_cipher_hd_t c)
   /* Only blocksizes 8 and 16 are used. Return value in such way
    * that compiler can optimize calling functions based on this.  */
   return c->spec->blocksize == 8 ? 3 : 4;
+}
+
+
+/* Optimized function for adding value to cipher block. */
+static inline void
+cipher_block_add(void *_dstsrc, unsigned int add, size_t blocksize)
+{
+  byte *dstsrc = _dstsrc;
+  u64 s[2];
+
+  if (blocksize == 8)
+    {
+      buf_put_be64(dstsrc + 0, buf_get_be64(dstsrc + 0) + add);
+    }
+  else /* blocksize == 16 */
+    {
+      s[0] = buf_get_be64(dstsrc + 8);
+      s[1] = buf_get_be64(dstsrc + 0);
+      s[0] += add;
+      s[1] += (s[0] < add);
+      buf_put_be64(dstsrc + 8, s[0]);
+      buf_put_be64(dstsrc + 0, s[1]);
+    }
 }
 
 
